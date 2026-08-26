@@ -36,8 +36,8 @@ function getEnvUsers() {
 
 // Helper: Execute SQL on Turso Serverless SQLite Database (if connected)
 async function queryTurso(sql, args = []) {
-    let url = process.env.TURSO_DATABASE_URL || process.env.TURSO_URL || process.env.LIBSQL_URL;
-    let token = process.env.TURSO_AUTH_TOKEN || process.env.TURSO_TOKEN || process.env.LIBSQL_AUTH_TOKEN;
+    let url = process.env.TURSO_DATABASE_URL || process.env.TURSO_URL || process.env.LIBSQL_URL || process.env.STORAGE_URL || process.env.STORAGE_DATABASE_URL;
+    let token = process.env.TURSO_AUTH_TOKEN || process.env.TURSO_TOKEN || process.env.LIBSQL_AUTH_TOKEN || process.env.STORAGE_AUTH_TOKEN || process.env.STORAGE_TOKEN || process.env.STORAGE_URL_TOKEN;
 
     if (!url || !token) return null;
 
