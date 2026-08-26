@@ -267,23 +267,21 @@ class StorageManager {
 
         const newUser = { username, password, role, createdAt };
 
-        if (this.settings.storageMode === 'server') {
-            try {
-                const res = await fetch(`${this.settings.serverApiUrl}/users`, {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'X-User-Role': curUser.role
-                    },
-                    body: JSON.stringify(newUser)
-                });
-                if (!res.ok) {
-                    const err = await res.json();
-                    return { success: false, error: err.error || 'Server error' };
-                }
-            } catch (err) {
-                console.warn('Server create user failed', err);
+        try {
+            const res = await fetch(this.getApiUrl('/users'), {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-User-Role': curUser.role
+                },
+                body: JSON.stringify(newUser)
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                return { success: false, error: err.error || 'Server error' };
             }
+        } catch (err) {
+            console.warn('API create user failed, fallback local', err);
         }
 
         const list = [...this.users, newUser];
@@ -384,23 +382,21 @@ class StorageManager {
             return { success: false, error: 'Only Owner role can convert account roles' };
         }
 
-        if (this.settings.storageMode === 'server') {
-            try {
-                const res = await fetch(`${this.settings.serverApiUrl}/users/${targetUsername}/role`, {
-                    method: 'PUT',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'X-User-Role': curUser.role
-                    },
-                    body: JSON.stringify({ role: newRole })
-                });
-                if (!res.ok) {
-                    const err = await res.json();
-                    return { success: false, error: err.error || 'Failed to update role on server' };
-                }
-            } catch (err) {
-                console.warn('Server change role failed', err);
+        try {
+            const res = await fetch(this.getApiUrl(`/users/${targetUsername}/role`), {
+                method: 'PUT',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-User-Role': curUser.role
+                },
+                body: JSON.stringify({ role: newRole })
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                return { success: false, error: err.error || 'Failed to update role' };
             }
+        } catch (err) {
+            console.warn('API change role failed, fallback local', err);
         }
 
         const list = this.users.map(u => {
@@ -424,19 +420,17 @@ class StorageManager {
             return { success: false, error: 'Only Owner role can delete Admin or Owner accounts' };
         }
 
-        if (this.settings.storageMode === 'server') {
-            try {
-                const res = await fetch(`${this.settings.serverApiUrl}/users/${username}`, { 
-                    method: 'DELETE',
-                    headers: { 'X-User-Role': curUser.role }
-                });
-                if (!res.ok) {
-                    const err = await res.json();
-                    return { success: false, error: err.error || 'Server delete failed' };
-                }
-            } catch (e) {
-                console.warn('Server delete user failed', e);
+        try {
+            const res = await fetch(this.getApiUrl(`/users/${username}`), { 
+                method: 'DELETE',
+                headers: { 'X-User-Role': curUser.role }
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                return { success: false, error: err.error || 'Server delete failed' };
             }
+        } catch (e) {
+            console.warn('API delete user failed, fallback local', e);
         }
 
         const list = this.users.filter(u => u.username !== username);

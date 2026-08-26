@@ -160,16 +160,24 @@ async function saveDynamicUsers(usersList) {
 
 // Get All Merged Users (Env Users + Webpage Created Users)
 async function getAllUsers() {
-    const envUsers = getEnvUsers();
     const dynamicUsers = await getDynamicUsers();
+    const envUsers = getEnvUsers();
 
-    const userMap = new Map();
-    // Load env users first
-    envUsers.forEach(u => userMap.set(u.username, u));
-    // Dynamic users take precedence or add new accounts created by owner from webpage
-    dynamicUsers.forEach(u => userMap.set(u.username, u));
+    if (dynamicUsers && dynamicUsers.length > 0) {
+        const userMap = new Map();
+        // Load env users first as initial seed
+        envUsers.forEach(u => userMap.set(u.username, u));
+        // Dynamic users override env users completely or add new accounts created from webpage
+        dynamicUsers.forEach(u => {
+            userMap.set(u.username, u);
+            if (u.originalUsername && u.originalUsername !== u.username) {
+                userMap.delete(u.originalUsername);
+            }
+        });
+        return Array.from(userMap.values());
+    }
 
-    return Array.from(userMap.values());
+    return envUsers;
 }
 
 // Authenticate user by username and password
@@ -200,7 +208,6 @@ async function addUser(userObj) {
         return { success: false, error: `Username '${un}' already exists` };
     }
 
-    const dynamicUsers = await getDynamicUsers();
     const newUser = {
         username: un,
         password: pw,
@@ -208,8 +215,8 @@ async function addUser(userObj) {
         createdAt: new Date().toISOString()
     };
 
-    dynamicUsers.push(newUser);
-    await saveDynamicUsers(dynamicUsers);
+    all.push(newUser);
+    await saveDynamicUsers(all);
 
     return { success: true, user: { username: un, role: role, createdAt: newUser.createdAt } };
 }
@@ -220,10 +227,10 @@ async function updateUserPassword(username, newPassword) {
     const pw = (newPassword || '').trim();
     if (!pw) return { success: false, error: 'New password required' };
 
-    const dynamicUsers = await getDynamicUsers();
+    let allUsers = await getAllUsers();
     let found = false;
 
-    const updated = dynamicUsers.map(u => {
+    allUsers = allUsers.map(u => {
         if (u.username === un) {
             found = true;
             return { ...u, password: pw };
@@ -231,68 +238,12 @@ async function updateUserPassword(username, newPassword) {
         return u;
     });
 
-    if (!found) {
-        const envUsers = getEnvUsers();
-        const envUser = envUsers.find(u => u.username === un);
-        if (envUser) {
-            updated.push({ ...envUser, password: pw });
-            found = true;
-        }
-    }
-
     if (found) {
-        await saveDynamicUsers(updated);
+        await saveDynamicUsers(allUsers);
         return { success: true, username: un };
     }
 
     return { success: false, error: 'User not found' };
-}
-
-// Update User Role
-async function updateUserRole(username, newRole) {
-    const un = (username || '').trim();
-    const role = (newRole || '').trim();
-
-    const dynamicUsers = await getDynamicUsers();
-    let found = false;
-
-    const updated = dynamicUsers.map(u => {
-        if (u.username === un) {
-            found = true;
-            return { ...u, role };
-        }
-        return u;
-    });
-
-    if (!found) {
-        const envUsers = getEnvUsers();
-        const envUser = envUsers.find(u => u.username === un);
-        if (envUser) {
-            updated.push({ ...envUser, role });
-            found = true;
-        }
-    }
-
-    if (found) {
-        await saveDynamicUsers(updated);
-        return { success: true, username: un, role };
-    }
-
-    return { success: false, error: 'User not found' };
-}
-
-// Delete User
-async function deleteUser(username) {
-    const un = (username || '').trim();
-    let dynamicUsers = await getDynamicUsers();
-    const initialLen = dynamicUsers.length;
-    dynamicUsers = dynamicUsers.filter(u => u.username !== un);
-
-    if (dynamicUsers.length !== initialLen) {
-        await saveDynamicUsers(dynamicUsers);
-        return { success: true, deleted_user: un };
-    }
-    return { success: false, error: 'User not found or cannot delete env user' };
 }
 
 // Update Username
@@ -303,36 +254,63 @@ async function updateUsername(oldUsername, newUsername) {
     if (!cleanNew) return { success: false, error: 'New username required' };
     if (cleanOld === cleanNew) return { success: true, username: cleanNew };
 
-    const all = await getAllUsers();
-    if (all.some(u => u.username.toLowerCase() === cleanNew.toLowerCase() && u.username !== cleanOld)) {
+    let allUsers = await getAllUsers();
+    if (allUsers.some(u => u.username.toLowerCase() === cleanNew.toLowerCase() && u.username !== cleanOld)) {
         return { success: false, error: `Username '${cleanNew}' is already taken` };
     }
 
-    const dynamicUsers = await getDynamicUsers();
     let found = false;
-
-    const updatedUsers = dynamicUsers.map(u => {
+    allUsers = allUsers.map(u => {
         if (u.username === cleanOld) {
             found = true;
-            return { ...u, username: cleanNew };
+            return { ...u, username: cleanNew, originalUsername: u.originalUsername || cleanOld };
         }
         return u;
     });
 
-    if (!found) {
-        const envUsers = getEnvUsers();
-        const envUser = envUsers.find(u => u.username === cleanOld);
-        if (envUser) {
-            updatedUsers.push({ ...envUser, username: cleanNew });
-            found = true;
-        }
-    }
-
     if (found) {
-        await saveDynamicUsers(updatedUsers);
+        await saveDynamicUsers(allUsers);
         return { success: true, oldUsername: cleanOld, newUsername: cleanNew };
     }
 
+    return { success: false, error: 'User not found' };
+}
+
+// Update User Role
+async function updateUserRole(username, newRole) {
+    const un = (username || '').trim();
+    const role = (newRole || '').trim();
+
+    let allUsers = await getAllUsers();
+    let found = false;
+
+    allUsers = allUsers.map(u => {
+        if (u.username === un) {
+            found = true;
+            return { ...u, role };
+        }
+        return u;
+    });
+
+    if (found) {
+        await saveDynamicUsers(allUsers);
+        return { success: true, username: un, role };
+    }
+
+    return { success: false, error: 'User not found' };
+}
+
+// Delete User
+async function deleteUser(username) {
+    const un = (username || '').trim();
+    let allUsers = await getAllUsers();
+    const initialLen = allUsers.length;
+    allUsers = allUsers.filter(u => u.username !== un);
+
+    if (allUsers.length !== initialLen) {
+        await saveDynamicUsers(allUsers);
+        return { success: true, deleted_user: un };
+    }
     return { success: false, error: 'User not found' };
 }
 
