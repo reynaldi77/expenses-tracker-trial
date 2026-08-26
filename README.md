@@ -118,3 +118,4 @@ Run `server.py` on any Python environment. You can set the same `AUTH_USERS` or 
 # expenses-tracker-trial
 # expenses-tracker-trial
 # expenses-tracker-trial
+# expenses-tracker-trial
