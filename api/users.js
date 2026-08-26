@@ -2,7 +2,7 @@
  * Vercel Serverless Function: /api/users
  * Handles user listing, creation, role change, and password update on Vercel.
  */
-const { getAllUsers, addUser, updateUserPassword, updateUserRole, deleteUser } = require('./store');
+const { getAllUsers, addUser, updateUserPassword, updateUserRole, updateUsername, deleteUser } = require('./store');
 
 module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -47,12 +47,19 @@ module.exports = async (req, res) => {
             }
         }
 
-        // 3. PUT /api/users -> Password reset or Role update
+        // 3. PUT /api/users -> Password reset, Role update, or Username update
         if (req.method === 'PUT') {
             const urlParts = (req.url || '').split('?')[0].split('/').filter(Boolean);
-            // e.g. api/users/username/password or api/users/username/role
+            // e.g. api/users/username/password, api/users/username/username, or api/users/username/role
             const targetUsername = urlParts[2] || body.username || body.targetUsername;
             const action = urlParts[3] || body.action;
+
+            if (action === 'username' || body.newUsername) {
+                const newUsername = body.newUsername;
+                const result = await updateUsername(targetUsername, newUsername);
+                if (result.success) return res.status(200).json(result);
+                return res.status(400).json({ error: result.error });
+            }
 
             if (action === 'password' || body.newPassword || body.password) {
                 const newPassword = body.newPassword || body.password;

@@ -295,20 +295,18 @@ class StorageManager {
         const password = newPassword.trim();
         if (!password) return { success: false, error: 'New password cannot be empty' };
 
-        if (this.settings.storageMode === 'server') {
-            try {
-                const res = await fetch(`${this.settings.serverApiUrl}/users/${targetUsername}/password`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password })
-                });
-                if (!res.ok) {
-                    const err = await res.json();
-                    return { success: false, error: err.error || 'Failed to update password on server' };
-                }
-            } catch (err) {
-                console.warn('Server change password failed', err);
+        try {
+            const res = await fetch(this.getApiUrl(`/users/${targetUsername}/password`), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password })
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                return { success: false, error: err.error || 'Failed to update password' };
             }
+        } catch (err) {
+            console.warn('API change password failed, fallback local', err);
         }
 
         const list = this.users.map(u => {
@@ -334,26 +332,23 @@ class StorageManager {
             return { success: true, username: cleanNew };
         }
 
-        // Check if newUsername is already taken by another account
         const exists = this.users.some(u => u.username.toLowerCase() === cleanNew.toLowerCase() && u.username !== cleanOld);
         if (exists) {
             return { success: false, error: `Username '${cleanNew}' is already taken` };
         }
 
-        if (this.settings.storageMode === 'server') {
-            try {
-                const res = await fetch(`${this.settings.serverApiUrl}/users/${cleanOld}/username`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ newUsername: cleanNew })
-                });
-                if (!res.ok) {
-                    const err = await res.json();
-                    return { success: false, error: err.error || 'Failed to update username on server' };
-                }
-            } catch (err) {
-                console.warn('Server update username failed', err);
+        try {
+            const res = await fetch(this.getApiUrl(`/users/${cleanOld}/username`), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ newUsername: cleanNew })
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                return { success: false, error: err.error || 'Failed to update username' };
             }
+        } catch (err) {
+            console.warn('API update username failed, fallback local', err);
         }
 
         // Update local users array

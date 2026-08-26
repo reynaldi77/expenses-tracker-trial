@@ -295,12 +295,54 @@ async function deleteUser(username) {
     return { success: false, error: 'User not found or cannot delete env user' };
 }
 
+// Update Username
+async function updateUsername(oldUsername, newUsername) {
+    const cleanOld = (oldUsername || '').trim();
+    const cleanNew = (newUsername || '').trim();
+
+    if (!cleanNew) return { success: false, error: 'New username required' };
+    if (cleanOld === cleanNew) return { success: true, username: cleanNew };
+
+    const all = await getAllUsers();
+    if (all.some(u => u.username.toLowerCase() === cleanNew.toLowerCase() && u.username !== cleanOld)) {
+        return { success: false, error: `Username '${cleanNew}' is already taken` };
+    }
+
+    const dynamicUsers = await getDynamicUsers();
+    let found = false;
+
+    const updatedUsers = dynamicUsers.map(u => {
+        if (u.username === cleanOld) {
+            found = true;
+            return { ...u, username: cleanNew };
+        }
+        return u;
+    });
+
+    if (!found) {
+        const envUsers = getEnvUsers();
+        const envUser = envUsers.find(u => u.username === cleanOld);
+        if (envUser) {
+            updatedUsers.push({ ...envUser, username: cleanNew });
+            found = true;
+        }
+    }
+
+    if (found) {
+        await saveDynamicUsers(updatedUsers);
+        return { success: true, oldUsername: cleanOld, newUsername: cleanNew };
+    }
+
+    return { success: false, error: 'User not found' };
+}
+
 module.exports = {
     getAllUsers,
     authenticateUser,
     addUser,
     updateUserPassword,
     updateUserRole,
+    updateUsername,
     deleteUser,
     queryTurso
 };
