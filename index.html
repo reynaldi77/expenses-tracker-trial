@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Smart Expense Tracker - Track transactions, manage reimbursements, analyze spending, and export reports in Excel & PDF format.">
+    <title>SpendWise - Smart Expense & Reimbursement Tracker</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- External Libraries (SheetJS, jsPDF, AutoTable, Chart.js) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/styles.css?v=20260826_v9">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar / Navigation Header -->
+        <header class="app-header">
+            <div class="header-brand">
+                <div class="brand-icon">
+                    <i data-lucide="wallet"></i>
+                </div>
+                <div class="brand-text">
+                    <h1>SpendWise</h1>
+                    <span class="brand-tagline">Expense & Reimbursement Tracker</span>
+                </div>
+            </div>
+
+            <div class="header-actions">
+                <!-- User Profile & Auth Badge -->
+                <div class="user-profile-badge" id="userProfileBadge" title="Click to update your username" style="cursor: pointer;">
+                    <div class="user-avatar" id="userAvatar">M</div>
+                    <div class="user-meta">
+                        <span class="user-name" id="userNameText">mariahd</span>
+                        <span class="user-role-tag" id="userRoleTag">user</span>
+                    </div>
+                    <i data-lucide="edit-3" class="badge-icon" style="opacity: 0.7; margin-left: 2px;"></i>
+                </div>
+
+                <!-- Currency Quick Switcher Button -->
+                <div class="header-currency-badge" id="headerCurrencyBtn" title="Click to Change Active Currency">
+                    <i data-lucide="coins"></i>
+                    <span id="headerCurrencyText">Currency: Rp</span>
+                    <i data-lucide="chevron-down" class="badge-icon"></i>
+                </div>
+
+                <!-- Admin Management Panel Button (Visible for admin) -->
+                <button class="btn btn-admin-manage btn-sm" id="adminPanelBtn" style="display: none;" title="Manage Registered User Accounts">
+                    <i data-lucide="users"></i>
+                    <span>Manage Users</span>
+                </button>
+
+                <!-- Storage Status Badge -->
+                <div class="storage-status-badge" id="storageStatusBadge" title="Click to toggle Storage Settings">
+                    <span class="status-dot online" id="statusDot"></span>
+                    <span id="storageStatusText">Local Storage</span>
+                    <i data-lucide="settings" class="badge-icon"></i>
+                </div>
+
+                <!-- Theme Toggle -->
+                <button class="icon-btn" id="themeToggleBtn" title="Toggle Dark/Light Mode">
+                    <i data-lucide="sun" id="themeIcon"></i>
+                </button>
+
+                <!-- Logout Button -->
+                <button class="icon-btn btn-logout" id="logoutBtn" title="Log Out">
+                    <i data-lucide="log-out"></i>
+                </button>
+
+                <!-- New Transaction Button -->
+                <button class="btn btn-primary" id="openAddModalBtn">
+                    <i data-lucide="plus-circle"></i>
+                    <span>Add Expense</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Dashboard Content -->
+        <main class="dashboard-main" id="dashboardMain">
+            <!-- Top Summary Cards & Budget Widget -->
+            <section class="summary-grid">
+                <div class="metric-card card-total">
+                    <div class="metric-icon">
+                        <i data-lucide="receipt"></i>
+                    </div>
+                    <div class="metric-info">
+                        <span class="metric-label">Total Expenses</span>
+                        <h2 class="metric-value" id="statTotalAmount">$0.00</h2>
+                        <span class="metric-sub" id="statTotalCount">0 transactions</span>
+                    </div>
+                </div>
+
+                <div class="metric-card card-reimbursed">
+                    <div class="metric-icon">
+                        <i data-lucide="check-circle-2"></i>
+                    </div>
+                    <div class="metric-info">
+                        <span class="metric-label">Total Reimbursed</span>
+                        <h2 class="metric-value" id="statReimbursedAmount">$0.00</h2>
+                        <span class="metric-sub" id="statReimbursedCount">0 items settled</span>
+                    </div>
+                </div>
+
+                <div class="metric-card card-pending">
+                    <div class="metric-icon">
+                        <i data-lucide="clock"></i>
+                    </div>
+                    <div class="metric-info">
+                        <span class="metric-label">Pending Claim</span>
+                        <h2 class="metric-value" id="statPendingAmount">$0.00</h2>
+                        <span class="metric-sub" id="statPendingCount">0 claims pending</span>
+                    </div>
+                </div>
+
+                <div class="metric-card card-net">
+                    <div class="metric-icon">
+                        <i data-lucide="piggy-bank"></i>
+                    </div>
+                    <div class="metric-info">
+                        <span class="metric-label">Net Out-Of-Pocket</span>
+                        <h2 class="metric-value" id="statNetOutofPocket">$0.00</h2>
+                        <span class="metric-sub">Personal cost</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Budget Alert Widget -->
+            <section class="budget-widget-card glass-panel">
+                <div class="budget-header">
+                    <div class="budget-title">
+                        <i data-lucide="target"></i>
+                        <span>Monthly Budget Target</span>
+                    </div>
+                    <div class="budget-actions">
+                        <span class="budget-status-text" id="budgetText">0% used of $1,000.00 target</span>
+                        <button class="btn btn-sm btn-ghost" id="editBudgetBtn" title="Set Budget Limit">
+                            <i data-lucide="edit-3"></i> Set Cap
+                        </button>
+                    </div>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar-fill" id="budgetProgressBar" style="width: 0%;"></div>
+                </div>
+            </section>
+
+            <!-- Charts Toggle & Container -->
+            <section class="analytics-section glass-panel">
+                <div class="section-header">
+                    <div class="section-title">
+                        <i data-lucide="bar-chart-3"></i>
+                        <h3>Spending Analytics</h3>
+                    </div>
+                    <button class="btn btn-sm btn-outline" id="toggleChartsBtn">
+                        <i data-lucide="chevron-down" id="chartsToggleIcon"></i>
+                        <span id="chartsToggleText">Hide Charts</span>
+                    </button>
+                </div>
+                
+                <div class="charts-grid" id="chartsGrid">
+                    <div class="chart-card">
+                        <h4>Expense by Category</h4>
+                        <div class="chart-wrapper">
+                            <canvas id="categoryChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h4>Monthly Spending & Reimbursement Trend</h4>
+                        <div class="chart-wrapper">
+                            <canvas id="trendChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Toolbar: Filters & Export Actions -->
+            <section class="toolbar-card glass-panel">
+                <div class="filter-controls">
+                    <!-- Search Input -->
+                    <div class="search-box">
+                        <i data-lucide="search"></i>
+                        <input type="text" id="searchInput" placeholder="Search description, payee, notes...">
+                    </div>
+
+                    <!-- Category Filter -->
+                    <div class="filter-group">
+                        <select id="filterCategory">
+                            <option value="ALL">All Categories</option>
+                            <option value="Food & Dining">Food & Dining</option>
+                            <option value="Transportation">Transportation</option>
+                            <option value="Utilities & Bills">Utilities & Bills</option>
+                            <option value="Office & Work">Office & Work</option>
+                            <option value="Entertainment">Entertainment</option>
+                            <option value="Healthcare">Healthcare</option>
+                            <option value="Shopping">Shopping</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+
+                    <!-- Reimbursement Filter -->
+                    <div class="filter-group">
+                        <select id="filterReimbursed">
+                            <option value="ALL">All Statuses</option>
+                            <option value="YES">Reimbursed Only</option>
+                            <option value="PENDING">Pending Claim</option>
+                            <option value="NO">Not Reimbursed</option>
+                        </select>
+                    </div>
+
+                    <!-- Payment Type Quick Filter -->
+                    <div class="filter-group">
+                        <select id="filterPaymentType">
+                            <option value="ALL">All Payment Types</option>
+                            <option value="Cashless">💳 Cashless</option>
+                            <option value="Cash">💵 Cash</option>
+                        </select>
+                    </div>
+
+                    <!-- Date Range Quick Filter -->
+                    <div class="filter-group">
+                        <select id="filterDateRange">
+                            <option value="ALL">All Time</option>
+                            <option value="THIS_MONTH">This Month</option>
+                            <option value="LAST_MONTH">Last Month</option>
+                            <option value="THIS_YEAR">This Year</option>
+                        </select>
+                    </div>
+
+                    <!-- Admin Filter by User (Visible only for admin) -->
+                    <div class="filter-group" id="filterUserGroup" style="display: none;">
+                        <select id="filterUser">
+                            <option value="ALL">All Account Users</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="export-controls">
+                    <!-- Convert / Export Buttons -->
+                    <button class="btn btn-excel" id="exportXlsxBtn" title="Export current list to Excel (.xlsx)">
+                        <i data-lucide="file-spreadsheet"></i>
+                        <span>Export Excel</span>
+                    </button>
+                    
+                    <button class="btn btn-pdf" id="exportPdfBtn" title="Export printable PDF expense report">
+                        <i data-lucide="file-text"></i>
+                        <span>Export PDF</span>
+                    </button>
+
+                    <!-- Data Backup Dropdown -->
+                    <div class="dropdown">
+                        <button class="btn btn-outline" id="dataBackupBtn" title="Backup / Restore data">
+                            <i data-lucide="database"></i>
+                            <i data-lucide="chevron-down" class="btn-chevron"></i>
+                        </button>
+                        <div class="dropdown-menu" id="backupDropdown">
+                            <button class="dropdown-item" id="exportJsonBtn">
+                                <i data-lucide="download"></i> Export JSON Backup
+                            </button>
+                            <button class="dropdown-item" id="importJsonBtn">
+                                <i data-lucide="upload"></i> Import JSON Data
+                            </button>
+                            <input type="file" id="jsonFileInput" accept=".json" style="display: none;">
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Transactions Table -->
+            <section class="table-section glass-panel">
+                <div class="table-responsive">
+                    <table class="expense-table" id="expenseTable">
+                        <thead>
+                            <tr>
+                                <th data-sort="datetime" class="sortable">
+                                    <span>Date & Time</span>
+                                    <i data-lucide="arrow-up-down" class="sort-icon"></i>
+                                </th>
+                                <th data-sort="amount" class="sortable text-right">
+                                    <span id="thAmountLabel">Expenses (Rp)</span>
+                                    <i data-lucide="arrow-up-down" class="sort-icon"></i>
+                                </th>
+                                <th class="col-user" style="display: none;">Account User</th>
+                                <th>Category</th>
+                                <th>Payment Type</th>
+                                <th>Comment / Description</th>
+                                <th>Reimbursed Status</th>
+                                <th>Reimbursed Details</th>
+                                <th>Receipt</th>
+                                <th class="text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expenseTableBody">
+                            <!-- Rows populated dynamically via JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Empty State -->
+                <div class="empty-state" id="emptyState" style="display: none;">
+                    <div class="empty-icon">
+                        <i data-lucide="receipt"></i>
+                    </div>
+                    <h3>No Expenses Found</h3>
+                    <p>No transaction matches your search filter or record is empty.</p>
+                    <button class="btn btn-primary" id="emptyAddBtn">
+                        <i data-lucide="plus"></i> Add First Expense
+                    </button>
+                </div>
+
+                <!-- Table Footer Stats -->
+                <div class="table-footer">
+                    <span id="showingRecordsText">Showing 0 of 0 transactions</span>
+                    <div class="table-totals">
+                        <span>Filtered Total: <strong id="tableFilteredTotal">$0.00</strong></span>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>SpendWise &copy; 2026 • Local-First & Server-Ready Expense Tracker</p>
+        </footer>
+    </div>
+
+    <!-- ==================== MODALS ==================== -->
+
+    <!-- 0. User Login Overlay Modal -->
+    <div class="modal-backdrop login-backdrop" id="loginModal">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="brand-icon lg">
+                    <i data-lucide="wallet"></i>
+                </div>
+                <h2>Welcome to SpendWise</h2>
+                <p>Please log in to manage your expenses & reimbursements.</p>
+            </div>
+
+            <form id="loginForm" autocomplete="off">
+                <div class="form-group">
+                    <label for="loginUsername">Username</label>
+                    <input type="text" id="loginUsername" placeholder="Your username" required autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <div class="password-input-wrapper">
+                        <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="off">
+                        <button type="button" class="toggle-password-btn" data-target="loginPassword" title="Show / Hide Password">
+                            <i data-lucide="eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="login-error" id="loginErrorMsg"></div>
+                <button type="submit" class="btn btn-primary btn-block">
+                    <i data-lucide="log-in"></i>
+                    <span>Log In</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 1. Admin User Management Modal -->
+    <div class="modal-backdrop" id="adminModal">
+        <div class="modal-card modal-lg">
+            <div class="modal-header">
+                <h3>Admin User Management Panel</h3>
+                <button class="modal-close-btn" id="closeAdminModalBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Add User Form -->
+                <div class="admin-add-section glass-panel">
+                    <h4>Register New User Account</h4>
+                    <form id="addUserForm" class="add-user-form">
+                        <div class="form-row">
+                            <div class="form-group flex-1">
+                                <label for="newUsername">Username <span class="req">*</span></label>
+                                <input type="text" id="newUsername" placeholder="e.g. john_doe" required>
+                            </div>
+                            <div class="form-group flex-1">
+                                <label for="newPassword">Password <span class="req">*</span></label>
+                                <div class="password-input-wrapper">
+                                    <input type="password" id="newPassword" placeholder="e.g. pass123" required>
+                                    <button type="button" class="toggle-password-btn" data-target="newPassword" title="Show / Hide Password">
+                                        <i data-lucide="eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="form-group" style="width: 140px;">
+                                <label for="newRole">Role</label>
+                                <select id="newRole">
+                                    <option value="user">User</option>
+                                    <option value="admin">Admin</option>
+                                    <option value="owner">Owner</option>
+                                </select>
+                            </div>
+                            <div class="form-group btn-align-bottom">
+                                <button type="submit" class="btn btn-primary">
+                                    <i data-lucide="user-plus"></i> Add Account
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Registered Users List Table -->
+                <div class="admin-users-section">
+                    <h4>Registered System Accounts</h4>
+                    <div class="table-responsive">
+                        <table class="expense-table admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Username</th>
+                                    <th>Role</th>
+                                    <th>Created At</th>
+                                    <th class="text-center">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adminUserTableBody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="closeAdminPanelBtn">Close Panel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 1b. Change Password Modal -->
+    <div class="modal-backdrop" id="changePasswordModal">
+        <div class="modal-card modal-sm">
+            <div class="modal-header">
+                <h3>Change User Password</h3>
+                <button class="modal-close-btn" id="closeChangePassModalBtn">&times;</button>
+            </div>
+            <form id="changePasswordForm">
+                <input type="hidden" id="targetPassUsername">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Account Username</label>
+                        <input type="text" id="targetUsernameDisplay" readonly style="opacity: 0.75; cursor: not-allowed;">
+                    </div>
+                    <div class="form-group">
+                        <label for="newPassInput">New Password <span class="req">*</span></label>
+                        <div class="password-input-wrapper">
+                            <input type="password" id="newPassInput" placeholder="Enter new password" required autocomplete="new-password">
+                            <button type="button" class="toggle-password-btn" data-target="newPassInput" title="Show / Hide Password">
+                                <i data-lucide="eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="cancelChangePassBtn">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="saveChangePassBtn">
+                        <i data-lucide="key"></i> Update Password
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 1c. My Account Settings Modal -->
+    <div class="modal-backdrop" id="myAccountModal">
+        <div class="modal-card modal-md">
+            <div class="modal-header">
+                <h3>My Account Settings</h3>
+                <button class="modal-close-btn" id="closeMyAccountModalBtn">&times;</button>
+            </div>
+            <form id="myAccountForm">
+                <div class="modal-body">
+                    <!-- Update Username Section -->
+                    <div class="settings-group">
+                        <h4>Account Username</h4>
+                        <div class="form-group">
+                            <label for="myAccountUsernameInput">Username <span class="req">*</span></label>
+                            <input type="text" id="myAccountUsernameInput" required placeholder="Your username" autocomplete="username">
+                        </div>
+                    </div>
+
+                    <!-- Change Password Section -->
+                    <div class="settings-group">
+                        <h4>Change Password</h4>
+                        <p class="text-sub" style="font-size: 0.8rem; margin-bottom: 6px;">Leave blank if you do not wish to change your password.</p>
+                        <div class="form-group">
+                            <label for="myAccountPasswordInput">New Password</label>
+                            <div class="password-input-wrapper">
+                                <input type="password" id="myAccountPasswordInput" placeholder="Enter new password (optional)" autocomplete="new-password">
+                                <button type="button" class="toggle-password-btn" data-target="myAccountPasswordInput" title="Show / Hide Password">
+                                    <i data-lucide="eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Preferred Currency Section -->
+                    <div class="settings-group">
+                        <h4>Active Currency Preference</h4>
+                        <div class="currency-options-grid" id="myAccountCurrencyGrid">
+                            <button type="button" class="currency-option-btn" data-currency="Rp">
+                                <strong>Rp (IDR)</strong>
+                                <span>Indonesian Rupiah</span>
+                            </button>
+                            <button type="button" class="currency-option-btn" data-currency="$">
+                                <strong>$ (USD)</strong>
+                                <span>US Dollar</span>
+                            </button>
+                            <button type="button" class="currency-option-btn" data-currency="€">
+                                <strong>€ (EUR)</strong>
+                                <span>Euro</span>
+                            </button>
+                            <button type="button" class="currency-option-btn" data-currency="£">
+                                <strong>£ (GBP)</strong>
+                                <span>British Pound</span>
+                            </button>
+                            <button type="button" class="currency-option-btn" data-currency="¥">
+                                <strong>¥ (JPY)</strong>
+                                <span>Japanese Yen</span>
+                            </button>
+                            <button type="button" class="currency-option-btn" data-currency="A$">
+                                <strong>A$ (AUD)</strong>
+                                <span>Australian Dollar</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="cancelMyAccountBtn">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="saveMyAccountBtn">
+                        <i data-lucide="save"></i> Save Account Settings
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 2. Add / Edit Expense Modal -->
+    <div class="modal-backdrop" id="expenseModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 id="modalTitle">Add New Expense</h3>
+                <button class="modal-close-btn" id="closeModalBtn">&times;</button>
+            </div>
+            <form id="expenseForm">
+                <input type="hidden" id="expenseId">
+                <div class="modal-body">
+                    <!-- Date, Time & Amount Row -->
+                    <div class="form-row">
+                        <div class="form-group flex-1">
+                            <label for="expenseDate">Date <span class="req">*</span></label>
+                            <input type="date" id="expenseDate" required>
+                        </div>
+                        <div class="form-group flex-1">
+                            <label for="expenseTime">Time <span class="text-sub">(Optional)</span></label>
+                            <input type="time" id="expenseTime">
+                        </div>
+                        <div class="form-group flex-1">
+                            <label for="expenseAmount">Number of Expenses (Amount) <span class="req">*</span></label>
+                            <div class="input-with-symbol">
+                                <span class="currency-prefix" id="formCurrencyPrefix">Rp</span>
+                                <input type="number" id="expenseAmount" step="0.01" min="0.01" placeholder="0.00" required style="padding-left: 65px !important;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Category & Payment Type Row -->
+                    <div class="form-row">
+                        <div class="form-group flex-1">
+                            <label for="expenseCategory">Category <span class="req">*</span></label>
+                            <select id="expenseCategory" required>
+                                <option value="Food & Dining">Food & Dining</option>
+                                <option value="Transportation">Transportation</option>
+                                <option value="Utilities & Bills">Utilities & Bills</option>
+                                <option value="Office & Work">Office & Work</option>
+                                <option value="Entertainment">Entertainment</option>
+                                <option value="Healthcare">Healthcare</option>
+                                <option value="Shopping">Shopping</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div class="form-group flex-1">
+                            <label for="expensePaymentType">Payment Type <span class="req">*</span></label>
+                            <select id="expensePaymentType" required>
+                                <option value="Cashless">💳 Cashless</option>
+                                <option value="Cash">💵 Cash</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Comment / Description -->
+                    <div class="form-group">
+                        <label for="expenseComment" id="expenseCommentLabel">Comment / Description <span class="text-sub" id="expenseCommentReqLabel">(Optional)</span></label>
+                        <textarea id="expenseComment" rows="3" placeholder="Enter transaction comments, vendor name, purpose (Optional)..."></textarea>
+                    </div>
+
+                    <!-- Is Reimbursed Section -->
+                    <div class="reimbursement-box">
+                        <div class="reimbursement-header">
+                            <div class="form-group-checkbox">
+                                <input type="checkbox" id="isReimbursedCheck">
+                                <label for="isReimbursedCheck">Reimbursed by another party?</label>
+                            </div>
+                            <span class="field-hint">(Can be left empty if not applicable)</span>
+                        </div>
+
+                        <div class="reimbursement-details" id="reimbursementFields" style="display: none;">
+                            <div class="form-row">
+                                <div class="form-group flex-1">
+                                    <label for="reimbursementStatus">Claim Status</label>
+                                    <select id="reimbursementStatus">
+                                        <option value="PENDING">Pending Claim</option>
+                                        <option value="REIMBURSED">Fully Reimbursed</option>
+                                    </select>
+                                </div>
+                                <div class="form-group flex-1">
+                                    <label for="reimbursedBy">Reimbursed By (Company / Client / Person)</label>
+                                    <input type="text" id="reimbursedBy" placeholder="e.g. Acme Corp / John Doe">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group flex-1">
+                                    <label for="reimbursedAmount" id="reimbursedAmountLabel">Reimbursed Amount (Rp)</label>
+                                    <div class="input-with-symbol">
+                                        <span class="currency-prefix">Rp</span>
+                                        <input type="number" id="reimbursedAmount" step="0.01" min="0" placeholder="Optional amount" style="padding-left: 65px !important;">
+                                    </div>
+                                </div>
+                                <div class="form-group flex-1">
+                                    <label for="reimbursementNotes">Notes / Reference No.</label>
+                                    <input type="text" id="reimbursementNotes" placeholder="e.g. Claim ID #1042">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Receipt Image Attachment -->
+                    <div class="form-group">
+                        <label for="receiptFile">Receipt Image Attachment (Optional)</label>
+                        <div class="file-upload-area" id="receiptUploadArea">
+                            <i data-lucide="image"></i>
+                            <span id="uploadAreaText">Click or drag image to attach receipt</span>
+                            <input type="file" id="receiptFile" accept="image/*">
+                        </div>
+                        <div class="receipt-preview-thumb" id="receiptPreviewThumb" style="display: none;">
+                            <img id="thumbImg" src="" alt="Receipt Preview">
+                            <button type="button" class="btn-remove-thumb" id="removeThumbBtn">&times;</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="cancelModalBtn">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="saveExpenseBtn">Save Expense</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 3. Settings & Storage Mode Modal -->
+    <div class="modal-backdrop" id="settingsModal">
+        <div class="modal-card modal-md">
+            <div class="modal-header">
+                <h3>Storage & App Settings</h3>
+                <button class="modal-close-btn" id="closeSettingsModalBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Storage Mode Selector -->
+                <div class="settings-group">
+                    <h4>Data Storage Engine</h4>
+                    <p class="text-sub">Choose where your expense transactions are persisted.</p>
+                    
+                    <div class="storage-option-cards">
+                        <label class="storage-card" id="cardLocalStorage">
+                            <input type="radio" name="storageMode" value="local" checked>
+                            <div class="card-content">
+                                <i data-lucide="hard-drive"></i>
+                                <div>
+                                    <strong>Local Browser Storage</strong>
+                                    <p>Saved instantly in browser localStorage / IndexedDB. Zero backend required.</p>
+                                </div>
+                            </div>
+                        </label>
+
+                        <label class="storage-card" id="cardServerStorage">
+                            <input type="radio" name="storageMode" value="server">
+                            <div class="card-content">
+                                <i data-lucide="server"></i>
+                                <div>
+                                    <strong>Python SQLite REST API Server</strong>
+                                    <p>Connected to backend API. Ideal for multi-device sync and server deployment.</p>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+
+                    <!-- Server Endpoint Input -->
+                    <div class="form-group server-endpoint-box" id="serverEndpointBox" style="display: none;">
+                        <label for="serverApiUrl">Backend API Base URL</label>
+                        <div class="input-with-button">
+                            <input type="text" id="serverApiUrl" value="http://localhost:5050/api">
+                            <button class="btn btn-outline" id="testServerBtn">Test Connection</button>
+                        </div>
+                        <span class="server-status-info" id="serverConnectionResult"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="saveSettingsBtn">Apply & Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Budget Cap Modal -->
+    <div class="modal-backdrop" id="budgetModal">
+        <div class="modal-card modal-sm">
+            <div class="modal-header">
+                <h3>Set Monthly Budget Cap</h3>
+                <button class="modal-close-btn" id="closeBudgetModalBtn">&times;</button>
+            </div>
+            <form id="budgetForm">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="budgetLimitInput" id="budgetLimitLabel">Monthly Target Limit (Rp)</label>
+                        <input type="number" id="budgetLimitInput" min="0" step="50000" placeholder="5000000">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="cancelBudgetBtn">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="saveBudgetBtn">Save Target</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 5. Receipt Image Lightbox Modal -->
+    <div class="modal-backdrop" id="lightboxModal">
+        <div class="lightbox-content">
+            <button class="lightbox-close" id="closeLightboxBtn">&times;</button>
+            <img id="lightboxImg" src="" alt="Receipt View">
+            <div class="lightbox-caption" id="lightboxCaption"></div>
+        </div>
+    </div>
+
+    <!-- 6. Quick Currency Switcher Modal -->
+    <div class="modal-backdrop" id="quickCurrencyModal">
+        <div class="modal-card modal-sm">
+            <div class="modal-header">
+                <h3>Select Active Currency</h3>
+                <button class="modal-close-btn" id="closeQuickCurrencyModalBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="currency-options-grid">
+                    <button type="button" class="currency-option-btn" data-currency="Rp">
+                        <strong>Rp (IDR)</strong>
+                        <span>Indonesian Rupiah</span>
+                    </button>
+                    <button type="button" class="currency-option-btn" data-currency="$">
+                        <strong>$ (USD)</strong>
+                        <span>US Dollar</span>
+                    </button>
+                    <button type="button" class="currency-option-btn" data-currency="€">
+                        <strong>€ (EUR)</strong>
+                        <span>Euro</span>
+                    </button>
+                    <button type="button" class="currency-option-btn" data-currency="£">
+                        <strong>£ (GBP)</strong>
+                        <span>British Pound</span>
+                    </button>
+                    <button type="button" class="currency-option-btn" data-currency="¥">
+                        <strong>¥ (JPY)</strong>
+                        <span>Japanese Yen</span>
+                    </button>
+                    <button type="button" class="currency-option-btn" data-currency="A$">
+                        <strong>A$ (AUD)</strong>
+                        <span>Australian Dollar</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Scripts -->
+    <script src="js/storage.js?v=20260826_v9"></script>
+    <script src="js/export-excel.js?v=20260826_v9"></script>
+    <script src="js/export-pdf.js?v=20260826_v9"></script>
+    <script src="js/analytics.js?v=20260826_v9"></script>
+    <script src="js/app.js?v=20260826_v9"></script>
+</body>
+</html>
