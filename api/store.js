@@ -1,6 +1,6 @@
 /**
  * SpendWise Vercel Serverless Unified User & Expense Store
- * Combines Vercel Environment Variables + Dynamic Vercel Storage (Vercel KV / Upstash Redis / Serverless Store)
+ * Supports Vercel Environment Variables + Turso Serverless SQLite + Vercel KV / Upstash Redis
  */
 const fs = require('fs');
 
@@ -34,9 +34,69 @@ function getEnvUsers() {
     return envUsers;
 }
 
+// Helper: Execute SQL on Turso Serverless SQLite Database (if connected)
+async function queryTurso(sql, args = []) {
+    let url = process.env.TURSO_DATABASE_URL || process.env.TURSO_URL || process.env.LIBSQL_URL;
+    let token = process.env.TURSO_AUTH_TOKEN || process.env.TURSO_TOKEN || process.env.LIBSQL_AUTH_TOKEN;
+
+    if (!url || !token) return null;
+
+    if (url.startsWith('libsql://')) {
+        url = url.replace('libsql://', 'https://');
+    }
+    if (!url.startsWith('http')) {
+        url = `https://${url}`;
+    }
+    url = url.replace(/\/$/, '') + '/v2/pipeline';
+
+    const formattedArgs = args.map(arg => {
+        if (arg === null || arg === undefined) return { type: 'null' };
+        if (typeof arg === 'number') return { type: 'float', value: arg };
+        return { type: 'text', value: String(arg) };
+    });
+
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                requests: [
+                    { type: 'execute', stmt: { sql, args: formattedArgs } },
+                    { type: 'close' }
+                ]
+            })
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const results = data.results ? data.results[0] : null;
+        if (results && results.response && results.response.result) {
+            return results.response.result;
+        }
+    } catch (e) {
+        console.warn('Turso DB execution notice:', e);
+    }
+    return null;
+}
+
 // Helper: Read Dynamic Vercel Users
 async function getDynamicUsers() {
-    // 1. Try Vercel KV / Upstash Redis if configured in Vercel project
+    // 1. Try Turso Serverless SQLite DB
+    try {
+        await queryTurso("CREATE TABLE IF NOT EXISTS spendwise_kv (key TEXT PRIMARY KEY, value TEXT)");
+        const tursoResult = await queryTurso("SELECT value FROM spendwise_kv WHERE key = 'spendwise_users'");
+        if (tursoResult && tursoResult.rows && tursoResult.rows.length > 0) {
+            const rawVal = tursoResult.rows[0][0].value;
+            if (rawVal) {
+                const parsed = JSON.parse(rawVal);
+                if (Array.isArray(parsed)) return parsed;
+            }
+        }
+    } catch (e) {}
+
+    // 2. Try Vercel KV / Upstash Redis if configured
     const kvUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
     const kvToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -50,12 +110,10 @@ async function getDynamicUsers() {
                 const parsed = typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
                 if (Array.isArray(parsed)) return parsed;
             }
-        } catch (e) {
-            console.warn('Vercel KV fetch failed, falling back to temp store', e);
-        }
+        } catch (e) {}
     }
 
-    // 2. Fallback to /tmp store
+    // 3. Fallback to /tmp store
     try {
         if (fs.existsSync(TMP_FILE)) {
             const content = fs.readFileSync(TMP_FILE, 'utf8');
@@ -69,7 +127,15 @@ async function getDynamicUsers() {
 
 // Helper: Save Dynamic Vercel Users
 async function saveDynamicUsers(usersList) {
-    // 1. Try Vercel KV / Upstash Redis
+    const jsonStr = JSON.stringify(usersList);
+
+    // 1. Try Turso Serverless SQLite DB
+    try {
+        await queryTurso("CREATE TABLE IF NOT EXISTS spendwise_kv (key TEXT PRIMARY KEY, value TEXT)");
+        await queryTurso("INSERT OR REPLACE INTO spendwise_kv (key, value) VALUES ('spendwise_users', ?)", [jsonStr]);
+    } catch (e) {}
+
+    // 2. Try Vercel KV / Upstash Redis
     const kvUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
     const kvToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -81,14 +147,12 @@ async function saveDynamicUsers(usersList) {
                     Authorization: `Bearer ${kvToken}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(JSON.stringify(usersList))
+                body: JSON.stringify(jsonStr)
             });
-        } catch (e) {
-            console.warn('Vercel KV save failed', e);
-        }
+        } catch (e) {}
     }
 
-    // 2. Save to /tmp
+    // 3. Save to /tmp
     try {
         fs.writeFileSync(TMP_FILE, JSON.stringify(usersList, null, 2), 'utf8');
     } catch (e) {}
@@ -237,5 +301,6 @@ module.exports = {
     addUser,
     updateUserPassword,
     updateUserRole,
-    deleteUser
+    deleteUser,
+    queryTurso
 };

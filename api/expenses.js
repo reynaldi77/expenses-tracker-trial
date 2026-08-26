@@ -1,11 +1,27 @@
 /**
  * Vercel Serverless Function: /api/expenses
- * Handles expense CRUD persistence on Vercel
+ * Handles expense CRUD persistence on Vercel (supporting Turso SQLite, Vercel KV / Upstash Redis, and file fallback)
  */
 const fs = require('fs');
+const { queryTurso } = require('./store');
+
 const TMP_EXPENSES = '/tmp/spendwise_dynamic_expenses.json';
 
 async function getExpenses() {
+    // 1. Try Turso Serverless SQLite DB
+    try {
+        await queryTurso("CREATE TABLE IF NOT EXISTS spendwise_kv (key TEXT PRIMARY KEY, value TEXT)");
+        const tursoResult = await queryTurso("SELECT value FROM spendwise_kv WHERE key = 'spendwise_expenses'");
+        if (tursoResult && tursoResult.rows && tursoResult.rows.length > 0) {
+            const rawVal = tursoResult.rows[0][0].value;
+            if (rawVal) {
+                const parsed = JSON.parse(rawVal);
+                if (Array.isArray(parsed)) return parsed;
+            }
+        }
+    } catch (e) {}
+
+    // 2. Try Vercel KV / Upstash Redis
     const kvUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
     const kvToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -22,6 +38,7 @@ async function getExpenses() {
         } catch (e) {}
     }
 
+    // 3. Fallback to /tmp
     try {
         if (fs.existsSync(TMP_EXPENSES)) {
             const parsed = JSON.parse(fs.readFileSync(TMP_EXPENSES, 'utf8'));
@@ -33,6 +50,15 @@ async function getExpenses() {
 }
 
 async function saveExpenses(list) {
+    const jsonStr = JSON.stringify(list);
+
+    // 1. Try Turso Serverless SQLite DB
+    try {
+        await queryTurso("CREATE TABLE IF NOT EXISTS spendwise_kv (key TEXT PRIMARY KEY, value TEXT)");
+        await queryTurso("INSERT OR REPLACE INTO spendwise_kv (key, value) VALUES ('spendwise_expenses', ?)", [jsonStr]);
+    } catch (e) {}
+
+    // 2. Try Vercel KV / Upstash Redis
     const kvUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
     const kvToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -44,11 +70,12 @@ async function saveExpenses(list) {
                     Authorization: `Bearer ${kvToken}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(JSON.stringify(list))
+                body: JSON.stringify(jsonStr)
             });
         } catch (e) {}
     }
 
+    // 3. Save to /tmp
     try {
         fs.writeFileSync(TMP_EXPENSES, JSON.stringify(list, null, 2), 'utf8');
     } catch (e) {}
