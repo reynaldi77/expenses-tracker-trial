@@ -192,9 +192,7 @@ class StorageManager {
 
         // 1. Try server / Vercel API login endpoint first
         try {
-            const apiUrl = (this.settings.storageMode === 'server' && this.settings.serverApiUrl)
-                ? `${this.settings.serverApiUrl}/login`
-                : '/api/login';
+            const apiUrl = this.getApiUrl('/login');
 
             const res = await fetch(apiUrl, {
                 method: 'POST',
@@ -230,15 +228,23 @@ class StorageManager {
         this.setSession(null);
     }
 
+    getApiUrl(endpoint) {
+        if (this.settings.storageMode === 'server' && this.settings.serverApiUrl) {
+            return `${this.settings.serverApiUrl}${endpoint}`;
+        }
+        return `/api${endpoint}`;
+    }
+
     // User Management (Admin & Owner)
     async getUsers() {
-        if (this.settings.storageMode === 'server') {
-            try {
-                const res = await fetch(`${this.settings.serverApiUrl}/users`);
-                if (res.ok) return await res.json();
-            } catch (e) {
-                console.warn('Failed to fetch users from server', e);
+        try {
+            const res = await fetch(this.getApiUrl('/users'));
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data) && data.length > 0) return data;
             }
+        } catch (e) {
+            console.warn('Failed to fetch users from API, falling back to local', e);
         }
         return this.users.map(u => ({ username: u.username, role: u.role, createdAt: u.createdAt }));
     }
