@@ -115,3 +115,4 @@ When submitted, `POST /api/login` verifies credentials against these Vercel Envi
 ### Local Server Deployment (`server.py`)
 Run `server.py` on any Python environment. You can set the same `AUTH_USERS` or `ADMIN_USERNAME` / `ADMIN_PASSWORD` environment variables in your local shell or `.env` file before launching `python3 server.py 5050`.
 # expenses-tracker-trial
+# expenses-tracker-trial
