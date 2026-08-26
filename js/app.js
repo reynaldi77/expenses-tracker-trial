@@ -909,10 +909,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         // Storage & App Settings Modal
-        elements.storageStatusBadge.addEventListener('click', openSettingsModal);
-        elements.closeSettingsModalBtn.addEventListener('click', closeSettingsModal);
-        elements.saveSettingsBtn.addEventListener('click', saveSettingsFromModal);
-        elements.testServerBtn.addEventListener('click', testServerConnection);
+        if (elements.storageStatusBadge) {
+            elements.storageStatusBadge.addEventListener('click', openSettingsModal);
+        }
+        if (elements.closeSettingsModalBtn) {
+            elements.closeSettingsModalBtn.addEventListener('click', closeSettingsModal);
+        }
+        if (elements.saveSettingsBtn) {
+            elements.saveSettingsBtn.addEventListener('click', saveSettingsFromModal);
+        }
+        if (elements.testServerBtn) {
+            elements.testServerBtn.addEventListener('click', testServerConnection);
+        }
 
         document.querySelectorAll('input[name="storageMode"]').forEach(radio => {
             radio.addEventListener('change', (e) => {
