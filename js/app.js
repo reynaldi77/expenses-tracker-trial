@@ -1385,8 +1385,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function updateStorageStatusUI() {
         const isServer = settings.storageMode === 'server';
-        elements.storageStatusText.textContent = isServer ? 'Server API Storage' : 'Local Storage';
-        elements.statusDot.className = `status-dot ${isServer ? 'online' : 'online'}`;
+        if (elements.storageStatusText) elements.storageStatusText.textContent = isServer ? 'Server API Storage' : 'Local Storage';
+        if (elements.statusDot) elements.statusDot.className = `status-dot ${isServer ? 'online' : 'online'}`;
     }
 
     function applyTheme(theme) {
