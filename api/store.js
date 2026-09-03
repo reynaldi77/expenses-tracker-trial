@@ -1,6 +1,6 @@
 /**
  * SpendWise Vercel Serverless Unified User & Expense Store
- * Supports Vercel Environment Variables + Turso Serverless SQLite + Vercel KV / Upstash Redis
+ * Supports Vercel Environment Variables + Supabase Postgres + Turso SQLite + Vercel KV / Upstash Redis
  */
 const fs = require('fs');
 
@@ -32,6 +32,64 @@ function getEnvUsers() {
         });
     }
     return envUsers;
+}
+
+// Helper: Supabase PostgREST API Reader
+async function getSupabaseKV(keyName, env = process.env) {
+    let url = env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL;
+    let key = env.SUPABASE_KEY || env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!url || !key) return null;
+
+    url = url.replace(/\/$/, '') + `/rest/v1/spendwise_kv?key=eq.${keyName}&select=value`;
+
+    try {
+        const res = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'apikey': key,
+                'Authorization': `Bearer ${key}`,
+                'Accept': 'application/json'
+            }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0 && data[0].value) {
+                const parsed = JSON.parse(data[0].value);
+                if (Array.isArray(parsed)) return parsed;
+            }
+        }
+    } catch (e) {
+        console.warn('Supabase fetch notice:', e);
+    }
+    return null;
+}
+
+// Helper: Supabase PostgREST API Writer
+async function saveSupabaseKV(keyName, jsonStr, env = process.env) {
+    let url = env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL;
+    let key = env.SUPABASE_KEY || env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!url || !key) return false;
+
+    url = url.replace(/\/$/, '') + `/rest/v1/spendwise_kv`;
+
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'apikey': key,
+                'Authorization': `Bearer ${key}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'resolution=merge-duplicates'
+            },
+            body: JSON.stringify([{ key: keyName, value: jsonStr }])
+        });
+        return res.ok;
+    } catch (e) {
+        console.warn('Supabase save notice:', e);
+    }
+    return false;
 }
 
 // Helper: Execute SQL on Turso Serverless SQLite Database (if connected)
@@ -81,9 +139,15 @@ async function queryTurso(sql, args = []) {
     return null;
 }
 
-// Helper: Read Dynamic Vercel Users
+// Helper: Read Dynamic Vercel Users (Supabase -> Turso -> Vercel KV / Upstash -> File)
 async function getDynamicUsers() {
-    // 1. Try Turso Serverless SQLite DB
+    // 1. Try Supabase Postgres REST API
+    try {
+        const sbResult = await getSupabaseKV('spendwise_users');
+        if (Array.isArray(sbResult)) return sbResult;
+    } catch (e) {}
+
+    // 2. Try Turso Serverless SQLite DB
     try {
         await queryTurso("CREATE TABLE IF NOT EXISTS spendwise_kv (key TEXT PRIMARY KEY, value TEXT)");
         const tursoResult = await queryTurso("SELECT value FROM spendwise_kv WHERE key = 'spendwise_users'");
@@ -96,7 +160,7 @@ async function getDynamicUsers() {
         }
     } catch (e) {}
 
-    // 2. Try Vercel KV / Upstash Redis if configured
+    // 3. Try Vercel KV / Upstash Redis if configured
     const kvUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
     const kvToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -113,7 +177,7 @@ async function getDynamicUsers() {
         } catch (e) {}
     }
 
-    // 3. Fallback to /tmp store
+    // 4. Fallback to /tmp store
     try {
         if (fs.existsSync(TMP_FILE)) {
             const content = fs.readFileSync(TMP_FILE, 'utf8');
@@ -129,13 +193,18 @@ async function getDynamicUsers() {
 async function saveDynamicUsers(usersList) {
     const jsonStr = JSON.stringify(usersList);
 
-    // 1. Try Turso Serverless SQLite DB
+    // 1. Try Supabase Postgres REST API
+    try {
+        await saveSupabaseKV('spendwise_users', jsonStr);
+    } catch (e) {}
+
+    // 2. Try Turso Serverless SQLite DB
     try {
         await queryTurso("CREATE TABLE IF NOT EXISTS spendwise_kv (key TEXT PRIMARY KEY, value TEXT)");
         await queryTurso("INSERT OR REPLACE INTO spendwise_kv (key, value) VALUES ('spendwise_users', ?)", [jsonStr]);
     } catch (e) {}
 
-    // 2. Try Vercel KV / Upstash Redis
+    // 3. Try Vercel KV / Upstash Redis
     const kvUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
     const kvToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -152,7 +221,7 @@ async function saveDynamicUsers(usersList) {
         } catch (e) {}
     }
 
-    // 3. Save to /tmp
+    // 4. Save to /tmp
     try {
         fs.writeFileSync(TMP_FILE, JSON.stringify(usersList, null, 2), 'utf8');
     } catch (e) {}
@@ -165,9 +234,7 @@ async function getAllUsers() {
 
     if (dynamicUsers && dynamicUsers.length > 0) {
         const userMap = new Map();
-        // Load env users first as initial seed
         envUsers.forEach(u => userMap.set(u.username, u));
-        // Dynamic users override env users completely or add new accounts created from webpage
         dynamicUsers.forEach(u => {
             userMap.set(u.username, u);
             if (u.originalUsername && u.originalUsername !== u.username) {
@@ -322,5 +389,7 @@ module.exports = {
     updateUserRole,
     updateUsername,
     deleteUser,
-    queryTurso
+    queryTurso,
+    getSupabaseKV,
+    saveSupabaseKV
 };

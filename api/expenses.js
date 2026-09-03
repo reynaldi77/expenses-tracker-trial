@@ -1,14 +1,20 @@
 /**
  * Vercel Serverless Function: /api/expenses
- * Handles expense CRUD persistence on Vercel (supporting Turso SQLite, Vercel KV / Upstash Redis, and file fallback)
+ * Handles expense CRUD persistence on Vercel (supporting Supabase Postgres, Turso SQLite, Vercel KV / Upstash Redis, and file fallback)
  */
 const fs = require('fs');
-const { queryTurso } = require('./store');
+const { queryTurso, getSupabaseKV, saveSupabaseKV } = require('./store');
 
 const TMP_EXPENSES = '/tmp/spendwise_dynamic_expenses.json';
 
 async function getExpenses() {
-    // 1. Try Turso Serverless SQLite DB
+    // 1. Try Supabase Postgres REST API
+    try {
+        const sbResult = await getSupabaseKV('spendwise_expenses');
+        if (Array.isArray(sbResult)) return sbResult;
+    } catch (e) {}
+
+    // 2. Try Turso Serverless SQLite DB
     try {
         await queryTurso("CREATE TABLE IF NOT EXISTS spendwise_kv (key TEXT PRIMARY KEY, value TEXT)");
         const tursoResult = await queryTurso("SELECT value FROM spendwise_kv WHERE key = 'spendwise_expenses'");
@@ -21,7 +27,7 @@ async function getExpenses() {
         }
     } catch (e) {}
 
-    // 2. Try Vercel KV / Upstash Redis
+    // 3. Try Vercel KV / Upstash Redis
     const kvUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
     const kvToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -38,7 +44,7 @@ async function getExpenses() {
         } catch (e) {}
     }
 
-    // 3. Fallback to /tmp
+    // 4. Fallback to /tmp
     try {
         if (fs.existsSync(TMP_EXPENSES)) {
             const parsed = JSON.parse(fs.readFileSync(TMP_EXPENSES, 'utf8'));
@@ -52,13 +58,18 @@ async function getExpenses() {
 async function saveExpenses(list) {
     const jsonStr = JSON.stringify(list);
 
-    // 1. Try Turso Serverless SQLite DB
+    // 1. Try Supabase Postgres REST API
+    try {
+        await saveSupabaseKV('spendwise_expenses', jsonStr);
+    } catch (e) {}
+
+    // 2. Try Turso Serverless SQLite DB
     try {
         await queryTurso("CREATE TABLE IF NOT EXISTS spendwise_kv (key TEXT PRIMARY KEY, value TEXT)");
         await queryTurso("INSERT OR REPLACE INTO spendwise_kv (key, value) VALUES ('spendwise_expenses', ?)", [jsonStr]);
     } catch (e) {}
 
-    // 2. Try Vercel KV / Upstash Redis
+    // 3. Try Vercel KV / Upstash Redis
     const kvUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
     const kvToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -75,7 +86,7 @@ async function saveExpenses(list) {
         } catch (e) {}
     }
 
-    // 3. Save to /tmp
+    // 4. Save to /tmp
     try {
         fs.writeFileSync(TMP_EXPENSES, JSON.stringify(list, null, 2), 'utf8');
     } catch (e) {}

@@ -1,6 +1,6 @@
 /**
  * SpendWise Cloudflare Pages Functions Unified User & Expense Store
- * Supports Cloudflare Environment Variables, Turso Serverless SQLite, Cloudflare KV, and Upstash Redis.
+ * Supports Cloudflare Environment Variables, Supabase Postgres, Turso Serverless SQLite, Cloudflare KV, and Upstash Redis.
  */
 
 // Helper: Parse Environment Variable users
@@ -29,6 +29,64 @@ export function getEnvUsers(env) {
         });
     }
     return envUsers;
+}
+
+// Helper: Supabase PostgREST API Reader
+export async function getSupabaseKV(env, keyName) {
+    let url = env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL;
+    let key = env.SUPABASE_KEY || env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!url || !key) return null;
+
+    url = url.replace(/\/$/, '') + `/rest/v1/spendwise_kv?key=eq.${keyName}&select=value`;
+
+    try {
+        const res = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'apikey': key,
+                'Authorization': `Bearer ${key}`,
+                'Accept': 'application/json'
+            }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0 && data[0].value) {
+                const parsed = JSON.parse(data[0].value);
+                if (Array.isArray(parsed)) return parsed;
+            }
+        }
+    } catch (e) {
+        console.warn('Supabase fetch notice:', e);
+    }
+    return null;
+}
+
+// Helper: Supabase PostgREST API Writer
+export async function saveSupabaseKV(env, keyName, jsonStr) {
+    let url = env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL;
+    let key = env.SUPABASE_KEY || env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!url || !key) return false;
+
+    url = url.replace(/\/$/, '') + `/rest/v1/spendwise_kv`;
+
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'apikey': key,
+                'Authorization': `Bearer ${key}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'resolution=merge-duplicates'
+            },
+            body: JSON.stringify([{ key: keyName, value: jsonStr }])
+        });
+        return res.ok;
+    } catch (e) {
+        console.warn('Supabase save notice:', e);
+    }
+    return false;
 }
 
 // Helper: Execute SQL on Turso Serverless SQLite Database (if connected)
@@ -78,9 +136,15 @@ export async function queryTurso(env, sql, args = []) {
     return null;
 }
 
-// Helper: Read Dynamic Users (Turso -> Cloudflare KV -> Upstash Redis)
+// Helper: Read Dynamic Users (Supabase -> Turso -> Cloudflare KV -> Upstash Redis)
 export async function getDynamicUsers(env) {
-    // 1. Try Turso Serverless SQLite DB
+    // 1. Try Supabase Postgres REST API
+    try {
+        const sbResult = await getSupabaseKV(env, 'spendwise_users');
+        if (Array.isArray(sbResult)) return sbResult;
+    } catch (e) {}
+
+    // 2. Try Turso Serverless SQLite DB
     try {
         await queryTurso(env, "CREATE TABLE IF NOT EXISTS spendwise_kv (key TEXT PRIMARY KEY, value TEXT)");
         const tursoResult = await queryTurso(env, "SELECT value FROM spendwise_kv WHERE key = 'spendwise_users'");
@@ -93,7 +157,7 @@ export async function getDynamicUsers(env) {
         }
     } catch (e) {}
 
-    // 2. Try Cloudflare KV Namespace binding
+    // 3. Try Cloudflare KV Namespace binding
     const cfKv = env.SPENDWISE_KV || env.KV;
     if (cfKv && typeof cfKv.get === 'function') {
         try {
@@ -105,7 +169,7 @@ export async function getDynamicUsers(env) {
         } catch (e) {}
     }
 
-    // 3. Try Upstash Redis REST API
+    // 4. Try Upstash Redis REST API
     const kvUrl = env.UPSTASH_REDIS_REST_URL || env.KV_REST_API_URL;
     const kvToken = env.UPSTASH_REDIS_REST_TOKEN || env.KV_REST_API_TOKEN;
 
@@ -129,13 +193,18 @@ export async function getDynamicUsers(env) {
 export async function saveDynamicUsers(env, usersList) {
     const jsonStr = JSON.stringify(usersList);
 
-    // 1. Try Turso Serverless SQLite DB
+    // 1. Try Supabase Postgres REST API
+    try {
+        await saveSupabaseKV(env, 'spendwise_users', jsonStr);
+    } catch (e) {}
+
+    // 2. Try Turso Serverless SQLite DB
     try {
         await queryTurso(env, "CREATE TABLE IF NOT EXISTS spendwise_kv (key TEXT PRIMARY KEY, value TEXT)");
         await queryTurso(env, "INSERT OR REPLACE INTO spendwise_kv (key, value) VALUES ('spendwise_users', ?)", [jsonStr]);
     } catch (e) {}
 
-    // 2. Try Cloudflare KV Namespace binding
+    // 3. Try Cloudflare KV Namespace binding
     const cfKv = env.SPENDWISE_KV || env.KV;
     if (cfKv && typeof cfKv.put === 'function') {
         try {
@@ -143,7 +212,7 @@ export async function saveDynamicUsers(env, usersList) {
         } catch (e) {}
     }
 
-    // 3. Try Upstash Redis
+    // 4. Try Upstash Redis
     const kvUrl = env.UPSTASH_REDIS_REST_URL || env.KV_REST_API_URL;
     const kvToken = env.UPSTASH_REDIS_REST_TOKEN || env.KV_REST_API_TOKEN;
 
@@ -317,7 +386,13 @@ export async function deleteUser(env, username) {
 
 // Expenses CRUD for Cloudflare
 export async function getExpenses(env) {
-    // 1. Try Turso Serverless SQLite DB
+    // 1. Try Supabase Postgres REST API
+    try {
+        const sbResult = await getSupabaseKV(env, 'spendwise_expenses');
+        if (Array.isArray(sbResult)) return sbResult;
+    } catch (e) {}
+
+    // 2. Try Turso Serverless SQLite DB
     try {
         await queryTurso(env, "CREATE TABLE IF NOT EXISTS spendwise_kv (key TEXT PRIMARY KEY, value TEXT)");
         const tursoResult = await queryTurso(env, "SELECT value FROM spendwise_kv WHERE key = 'spendwise_expenses'");
@@ -330,7 +405,7 @@ export async function getExpenses(env) {
         }
     } catch (e) {}
 
-    // 2. Try Cloudflare KV Namespace binding
+    // 3. Try Cloudflare KV Namespace binding
     const cfKv = env.SPENDWISE_KV || env.KV;
     if (cfKv && typeof cfKv.get === 'function') {
         try {
@@ -342,7 +417,7 @@ export async function getExpenses(env) {
         } catch (e) {}
     }
 
-    // 3. Try Upstash Redis
+    // 4. Try Upstash Redis
     const kvUrl = env.UPSTASH_REDIS_REST_URL || env.KV_REST_API_URL;
     const kvToken = env.UPSTASH_REDIS_REST_TOKEN || env.KV_REST_API_TOKEN;
 
@@ -365,13 +440,18 @@ export async function getExpenses(env) {
 export async function saveExpenses(env, list) {
     const jsonStr = JSON.stringify(list);
 
-    // 1. Try Turso Serverless SQLite DB
+    // 1. Try Supabase Postgres REST API
+    try {
+        await saveSupabaseKV(env, 'spendwise_expenses', jsonStr);
+    } catch (e) {}
+
+    // 2. Try Turso Serverless SQLite DB
     try {
         await queryTurso(env, "CREATE TABLE IF NOT EXISTS spendwise_kv (key TEXT PRIMARY KEY, value TEXT)");
         await queryTurso(env, "INSERT OR REPLACE INTO spendwise_kv (key, value) VALUES ('spendwise_expenses', ?)", [jsonStr]);
     } catch (e) {}
 
-    // 2. Try Cloudflare KV Namespace binding
+    // 3. Try Cloudflare KV Namespace binding
     const cfKv = env.SPENDWISE_KV || env.KV;
     if (cfKv && typeof cfKv.put === 'function') {
         try {
@@ -379,7 +459,7 @@ export async function saveExpenses(env, list) {
         } catch (e) {}
     }
 
-    // 3. Try Upstash Redis
+    // 4. Try Upstash Redis
     const kvUrl = env.UPSTASH_REDIS_REST_URL || env.KV_REST_API_URL;
     const kvToken = env.UPSTASH_REDIS_REST_TOKEN || env.KV_REST_API_TOKEN;
 
