@@ -1,5 +1,6 @@
-# SpendWise Cloudflare Pages / Workers Configuration
+# SpendWise Cloudflare Worker & Pages Configuration
 name = "spendwise-expense-tracker"
+main = "_worker.js"
 pages_build_output_dir = "."
 compatibility_date = "2024-01-01"
 
@@ -7,7 +8,7 @@ compatibility_date = "2024-01-01"
 directory = "."
 
 [vars]
-# Configure environment variables in Cloudflare Dashboard (Pages -> Settings -> Environment variables)
+# Configure environment variables in Cloudflare Dashboard
 # ADMIN_USERNAME = "reynaldiw"
 # ADMIN_PASSWORD = "YOUR_OWNER_PASSWORD"
 # USER_USERNAME = "mariahd"
