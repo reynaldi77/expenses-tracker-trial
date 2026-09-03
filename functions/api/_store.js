@@ -39,14 +39,22 @@ export function getEnvUsers(env) {
     return envUsers;
 }
 
+// Helper: Clean Supabase URL base
+function formatSupabaseUrl(rawUrl) {
+    if (!rawUrl) return '';
+    let u = String(rawUrl).trim().replace(/\/$/, '');
+    u = u.replace(/\/rest\/v1$/, '');
+    return u.replace(/\/$/, '');
+}
+
 // Helper: Supabase PostgREST API Reader
 export async function getSupabaseKV(env, keyName) {
-    let url = env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL;
+    let url = formatSupabaseUrl(env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL);
     let key = env.SUPABASE_KEY || env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     if (!url || !key) return null;
 
-    url = url.replace(/\/$/, '') + `/rest/v1/spendwise_kv?key=eq.${keyName}&select=value`;
+    url = `${url}/rest/v1/spendwise_kv?key=eq.${keyName}&select=value`;
 
     try {
         const res = await fetch(url, {
@@ -72,12 +80,12 @@ export async function getSupabaseKV(env, keyName) {
 
 // Helper: Supabase PostgREST API Writer
 export async function saveSupabaseKV(env, keyName, jsonStr) {
-    let url = env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL;
+    let url = formatSupabaseUrl(env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL);
     let key = env.SUPABASE_KEY || env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     if (!url || !key) return false;
 
-    url = url.replace(/\/$/, '') + `/rest/v1/spendwise_kv`;
+    url = `${url}/rest/v1/spendwise_kv`;
 
     try {
         const res = await fetch(url, {
