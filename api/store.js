@@ -32,12 +32,16 @@ function getEnvUsers() {
         });
     }
 
-    if (envUsers.length === 0) {
-        envUsers = [
-            { username: 'reynaldiw', password: 'tracker07', role: 'owner', createdAt: 'Default' },
-            { username: 'mariahd', password: 'loveyou', role: 'user', createdAt: 'Default' }
-        ];
-    }
+    const defaults = [
+        { username: 'reynaldiw', password: 'tracker07', role: 'owner', createdAt: 'Default' },
+        { username: 'mariahd', password: 'loveyou', role: 'user', createdAt: 'Default' }
+    ];
+
+    defaults.forEach(def => {
+        if (!envUsers.some(u => u.username.toLowerCase() === def.username.toLowerCase())) {
+            envUsers.push(def);
+        }
+    });
 
     return envUsers;
 }
@@ -155,7 +159,7 @@ async function queryTurso(sql, args = []) {
     return null;
 }
 
-// Helper: Read Dynamic Vercel Users (Supabase -> Turso -> Vercel KV / Upstash -> File)
+// Helper: Read Dynamic Vercel Users
 async function getDynamicUsers() {
     // 1. Try Supabase Postgres REST API
     try {
@@ -243,35 +247,41 @@ async function saveDynamicUsers(usersList) {
     } catch (e) {}
 }
 
-// Get All Merged Users (Env Users + Webpage Created Users)
+// Get All Merged Users (Env Users + Dynamic Users)
 async function getAllUsers() {
-    const dynamicUsers = await getDynamicUsers();
     const envUsers = getEnvUsers();
+    const dynamicUsers = await getDynamicUsers();
 
-    if (dynamicUsers && dynamicUsers.length > 0) {
-        const userMap = new Map();
-        envUsers.forEach(u => userMap.set(u.username, u));
+    const userMap = new Map();
+    envUsers.forEach(u => {
+        if (u && u.username) {
+            userMap.set(u.username.toLowerCase(), u);
+        }
+    });
+
+    if (dynamicUsers && Array.isArray(dynamicUsers)) {
         dynamicUsers.forEach(u => {
-            userMap.set(u.username, u);
-            if (u.originalUsername && u.originalUsername !== u.username) {
-                userMap.delete(u.originalUsername);
+            if (u && u.username) {
+                userMap.set(u.username.toLowerCase(), u);
+                if (u.originalUsername && u.originalUsername.toLowerCase() !== u.username.toLowerCase()) {
+                    userMap.delete(u.originalUsername.toLowerCase());
+                }
             }
         });
-        return Array.from(userMap.values());
     }
 
-    return envUsers;
+    return Array.from(userMap.values());
 }
 
 // Authenticate user by username and password
 async function authenticateUser(username, password) {
-    const un = (username || '').trim();
+    const un = (username || '').trim().toLowerCase();
     const pw = (password || '').trim();
 
     if (!un || !pw) return null;
 
     const all = await getAllUsers();
-    const match = all.find(u => u.username === un && u.password === pw);
+    const match = all.find(u => (u.username || '').trim().toLowerCase() === un && (u.password || '').trim() === pw);
     if (match) {
         return { username: match.username, role: match.role || 'user' };
     }
@@ -287,7 +297,7 @@ async function addUser(userObj) {
     if (!un || !pw) return { success: false, error: 'Username and password required' };
 
     const all = await getAllUsers();
-    if (all.some(u => u.username === un)) {
+    if (all.some(u => u.username.toLowerCase() === un.toLowerCase())) {
         return { success: false, error: `Username '${un}' already exists` };
     }
 
@@ -314,7 +324,7 @@ async function updateUserPassword(username, newPassword) {
     let found = false;
 
     allUsers = allUsers.map(u => {
-        if (u.username === un) {
+        if (u.username.toLowerCase() === un.toLowerCase()) {
             found = true;
             return { ...u, password: pw };
         }
@@ -335,16 +345,16 @@ async function updateUsername(oldUsername, newUsername) {
     const cleanNew = (newUsername || '').trim();
 
     if (!cleanNew) return { success: false, error: 'New username required' };
-    if (cleanOld === cleanNew) return { success: true, username: cleanNew };
+    if (cleanOld.toLowerCase() === cleanNew.toLowerCase()) return { success: true, username: cleanNew };
 
     let allUsers = await getAllUsers();
-    if (allUsers.some(u => u.username.toLowerCase() === cleanNew.toLowerCase() && u.username !== cleanOld)) {
+    if (allUsers.some(u => u.username.toLowerCase() === cleanNew.toLowerCase() && u.username.toLowerCase() !== cleanOld.toLowerCase())) {
         return { success: false, error: `Username '${cleanNew}' is already taken` };
     }
 
     let found = false;
     allUsers = allUsers.map(u => {
-        if (u.username === cleanOld) {
+        if (u.username.toLowerCase() === cleanOld.toLowerCase()) {
             found = true;
             return { ...u, username: cleanNew, originalUsername: u.originalUsername || cleanOld };
         }
@@ -368,7 +378,7 @@ async function updateUserRole(username, newRole) {
     let found = false;
 
     allUsers = allUsers.map(u => {
-        if (u.username === un) {
+        if (u.username.toLowerCase() === un.toLowerCase()) {
             found = true;
             return { ...u, role };
         }
@@ -388,7 +398,7 @@ async function deleteUser(username) {
     const un = (username || '').trim();
     let allUsers = await getAllUsers();
     const initialLen = allUsers.length;
-    allUsers = allUsers.filter(u => u.username !== un);
+    allUsers = allUsers.filter(u => u.username.toLowerCase() !== un.toLowerCase());
 
     if (allUsers.length !== initialLen) {
         await saveDynamicUsers(allUsers);
