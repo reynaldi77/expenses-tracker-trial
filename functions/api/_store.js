@@ -28,6 +28,14 @@ export function getEnvUsers(env) {
             createdAt: 'Cloudflare Env'
         });
     }
+
+    if (envUsers.length === 0) {
+        envUsers = [
+            { username: 'reynaldiw', password: 'tracker07', role: 'owner', createdAt: 'Default' },
+            { username: 'mariahd', password: 'loveyou', role: 'user', createdAt: 'Default' }
+        ];
+    }
+
     return envUsers;
 }
 
