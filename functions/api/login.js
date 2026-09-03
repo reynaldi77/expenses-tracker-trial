@@ -1,7 +1,7 @@
 /**
  * Cloudflare Pages Function: POST /api/login
  */
-import { authenticateUser } from './_store.js';
+import { authenticateUser, getAllUsers } from './_store.js';
 
 export async function onRequest(context) {
     const { request, env } = context;
@@ -37,10 +37,20 @@ export async function onRequest(context) {
             return new Response(JSON.stringify({ success: true, user }), { status: 200, headers: corsHeaders });
         }
 
-        return new Response(JSON.stringify({ success: false, error: 'Invalid username or password' }), { status: 401, headers: corsHeaders });
+        const allUsers = await getAllUsers(env);
+        const userExists = allUsers.some(u => (u.username || '').trim().toLowerCase() === username.toLowerCase());
+
+        let debugMsg = 'Invalid username or password';
+        if (!userExists) {
+            debugMsg += ` (User '${username}' not found in user directory. Found ${allUsers.length} accounts: ${allUsers.map(u=>u.username).join(', ')})`;
+        } else {
+            debugMsg += ` (Password mismatch for '${username}')`;
+        }
+
+        return new Response(JSON.stringify({ success: false, error: debugMsg }), { status: 401, headers: corsHeaders });
 
     } catch (err) {
         console.error('Cloudflare Login Error:', err);
-        return new Response(JSON.stringify({ success: false, error: 'Authentication server error' }), { status: 500, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: false, error: `Authentication server error: ${err.message}` }), { status: 500, headers: corsHeaders });
     }
 }
